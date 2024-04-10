@@ -1,0 +1,46 @@
+{
+    "classes": {
+      "8": {
+        "subjects": {
+          "English": ["Order of Words and Clauses",
+          "Direct and Indirect Speech",
+          "Active and Passive Voice",
+          "Tenses",
+          "Nouns",
+          "Pronouns",
+          "Verbs",
+          "Adverbs",
+          "Prepositions",
+          "Conjunctions",
+          "Phrases & Idioms",
+          "Vocabulary",
+          "Comprehension Reading"],
+          "Maths": ["Rational Numbers",
+          "Powers",
+          "Squares, Square roots,",
+          "Cubes, Cube roots",
+          "Playing with numbers",
+          "Algebraic Expressions",
+          "Ratio and Proportion",
+          "Understanding shapes",
+          "Representing 3-D in 2-D",
+          "Construction",
+          "Mensuration",
+          "Data Handling",
+          "Introduction to Graphs"],
+          "Social Science": [
+        "Where, When, How",
+          "The Establishment of Company Power",
+          "Rural Life and Society",
+          "Colonialism and Tribal Societies",
+          "Crafts and Industries",
+          "The Revolt of 1857-58",
+          "Education and British rule",
+          "Women and reform",
+          "Challenging the Caste System"
+        ]
+        }
+      }
+    }
+  }
+  

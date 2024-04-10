@@ -6,7 +6,7 @@ from langchain.prompts import PromptTemplate
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
-
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,8 +36,8 @@ def get_vector_store(text_chunks):
 
 def get_conversation_chain():
     prompt_template = """
-   To create a comprehensive test paper, you'll need to provide specific details to tailor the questions to your needs. Below are the parameters you can adjust:
-
+    You need to prepare a question paper based on the classes and subjects as well as difficulty level as well as question type
+    here are few terms that need to be taken tare while generating questions.
 1. Level of Difficulty: Choose from easy, medium, or difficult.
 2. Number of Questions: Specify how many questions you'd like in your test paper.
 3. Question Type: Select the type of questions you want to include. Here are examples of each type:
@@ -144,66 +144,122 @@ Based on your inputs, here are the questions generated for your test paper:
    d) Displacement
 
 ---
-
 Ensure accuracy in your inputs. If anything is unclear, please provide additional details or clarify your requirements.\n\n
 
-Context: What is the context or purpose of this test paper?
-Context:\n {context}?\n
+Class: {selected_class}
+Subject: {selected_subject}
 Chapter: {selected_chapter}
 Difficulty Level: {selected_difficulty}
 Question Type: {selected_question_type}
 Number of Questions: {selected_num_questions}
 
 Answer:
-
     """
 
     model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
-    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
+    prompt = PromptTemplate(template=prompt_template, input_variables=[ "question"])
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
 
-def user_input(selected_chapter, selected_difficulty, selected_question_type, selected_num_questions):
+
+
+def user_input(selected_class, selected_subject, selected_chapter, selected_difficulty, selected_question_type, selected_num_questions):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
     docs = new_db.similarity_search(selected_chapter)
     chain = get_conversation_chain()
-    response = chain({"input_documents": docs, "selected_chapter": selected_chapter, "selected_difficulty": selected_difficulty, "selected_question_type": selected_question_type, "selected_num_questions": selected_num_questions}, return_only_outputs=True)
+    response = chain({"input_documents": docs, "selected_class": selected_class, "selected_subject": selected_subject,"selected_chapter": selected_chapter, "selected_difficulty": selected_difficulty, "selected_question_type": selected_question_type, "selected_num_questions": selected_num_questions}, return_only_outputs=True)
     return response["output_text"]
+
+def get_chapters_from_class(selected_class):
+  """
+  This function retrieves chapters for a given class from data.json
+  """
+  try:
+    with open("data.json", "r") as file:
+      data = json.load(file)
+      class_data = data["classes"].get(str(selected_class))
+      if class_data:
+        return list(class_data["subjects"].keys())  # Return subject keys as chapters
+      else:
+        return []
+  except FileNotFoundError:
+    print("Error: data.json not found!")
+    return []
+  except json.JSONDecodeError:
+    print("Error: Invalid JSON format in data.json!")
+    return []
+
+def get_subjects_from_class(selected_class):
+  """
+  This function retrieves subjects for a given class from data.json
+  """
+  try:
+    with open("data.json", "r") as file:
+      data = json.load(file)
+      class_data = data["classes"].get(str(selected_class))
+      if class_data:
+        return list(class_data["subjects"].keys())  # Return subject keys
+      else:
+        return []
+  except FileNotFoundError:
+    print("Error: data.json not found!")
+    return []
+  except json.JSONDecodeError:
+    print("Error: Invalid JSON format in data.json!")
+    return []
+def load_data(filename):
+    with open(filename, "r") as file:
+        data = json.load(file)
+    return data
+def get_chapters_from_subject(selected_class, selected_subject):
+  """
+  This function retrieves chapters for a given subject within a class from data.json
+  """
+  try:
+    with open("data.json", "r") as file:
+      data = json.load(file)
+      class_data = data["classes"].get(str(selected_class))
+      if class_data and selected_subject in class_data["subjects"]:
+        return class_data["subjects"][selected_subject]
+      else:
+        return []
+  except FileNotFoundError:
+    print("Error: data.json not found!")
+    return []
+  except json.JSONDecodeError:
+    print("Error: Invalid JSON format in data.json!")
+    return []
+  
 
 def main():
     st.set_page_config("TestGenie")
-    st.header("Generate Science Question Paper for Class 6")
+    st.header("TestGenie")
+    data = load_data("data.json")
+    # # Add dropdown for selecting class
+    selected_class = st.selectbox("Select Class", list(data["classes"].keys()))
 
-    # user_question = st.text_input("Ask a Question:")
+    subjects = get_subjects_from_class(selected_class)
+    if not subjects:
+        st.error("No subjects found for selected class!")
+        return
 
-    # if user_question:
-    #     user_input(user_question)
+    # Add dropdown for selecting subject
+    selected_subject = st.selectbox("Select Subject", subjects)
 
-    # with st.sidebar:
-    #     st.title("Menu:")
-        # Remove the file upload button
-        # pdf_docs = st.file_uploader("Upload your PDF Files and Click on the Submit & Process Button", accept_multiple_files=True)
+    # Get chapters based on selected class and subject
+    chapters = get_chapters_from_subject(selected_class, selected_subject)
+    if not chapters:
+        st.error("No chapters found for selected class and subject combination!")
+        return
 
-        # Add dropdown for selecting chapter
-    selected_chapter = st.selectbox("Select Chapter", [
-        "Components of food",
-        "Sorting materials into groups",
-        "Separation of substances",
-        "Getting to know plants",
-        "Body movements",
-        "The living organisms — characteristics and habitats",
-        "Motion and measurement of distances",
-        "Light, shadows and reflections",
-        "Electricity and circuits",
-        "Fun with magnets",
-        "Air around us"
-    ])
+    # Add dropdown for selecting chapter (use chapters list retrieved)
+    selected_chapter = st.selectbox("Select Chapter", chapters)
 
-        # Add dropdown for selecting difficulty
+    # Add dropdown for selecting difficulty
     selected_difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"])
 
-        # Add dropdown for selecting question type
+    # Add dropdown for selecting question type
     selected_question_type = st.selectbox("Question Type", [
         "Long Answer Type",
         "Short Answer Type",
@@ -212,16 +268,16 @@ def main():
         "Fill in the blanks"
     ])
 
-        # Add dropdown for selecting number of questions
+    # Add dropdown for selecting number of questions
     selected_num_questions = st.selectbox("Number of Questions", ["5", "10", "15", "20"])
 
     if st.button("Submit & Process"):
         with st.spinner("Processing..."):
-            raw_text = get_pdf_text([])
-            text_chunks = get_text_chunks(raw_text)
-            get_vector_store(text_chunks)
-            st.success("Done")
-            result = user_input(selected_chapter, selected_difficulty, selected_question_type, selected_num_questions)
+            # raw_text = get_pdf_text([])
+            # text_chunks = get_text_chunks(raw_text)
+            # get_vector_store(text_chunks)
+            # st.success("Done")
+            result = user_input(selected_class, selected_subject, selected_chapter, selected_difficulty, selected_question_type, selected_num_questions)
             st.write("Reply: ", result)
 
 if __name__ == "__main__":
