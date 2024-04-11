@@ -1,42 +1,24 @@
 import streamlit as st
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain.vectorstores import FAISS
-from langchain.chains.question_answering import load_qa_chain
-from langchain.prompts import PromptTemplate
-from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-import os
+import google.generativeai as genai
 import json
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from typing import List
+st.set_page_config("TestGenie")
+st.header("TestGenie")
 
-def get_pdf_text(pdf_docs):
-    text = ""
-    # Use default PDF if no file is uploaded
-    if not pdf_docs:
-        pdf_docs = ["files/science.pdf"]
-    for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
-    return text
+try:
+    genai.configure(api_key = "AIzaSyAcTc43mWEvHeb_58ln_e-m2tm4nDHSUqw")
+except AttributeError as e:
+    st.warning("Something went wrong with API Key")
 
-def get_text_chunks(text):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
-    chunks = text_splitter.split_text(text)
-    return chunks
+model = genai.GenerativeModel("gemini-pro")
+chat = model.start_chat()
 
-def get_vector_store(text_chunks):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    vector_store = FAISS.from_texts(text_chunks, embeddings)
-    vector_store.save_local("faiss_index")
-
-def get_conversation_chain():
-    prompt_template = """
-    You need to prepare a question paper based on the classes and subjects as well as difficulty level as well as question type
+def user_input(selected_class, selected_subject, selected_chapter, selected_difficulty, selected_question_type, selected_num_questions):
+    prompt = f"""
+ You need to prepare a question paper based on the classes and subjects as well as difficulty level as well as question type
     here are few terms that need to be taken tare while generating questions.
 1. Level of Difficulty: Choose from easy, medium, or difficult.
 2. Number of Questions: Specify how many questions you'd like in your test paper.
@@ -154,112 +136,28 @@ Question Type: {selected_question_type}
 Number of Questions: {selected_num_questions}
 
 Answer:
-    """
+"""
+    response = chat.send_message(prompt)
+    return response.text
 
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
-    prompt = PromptTemplate(template=prompt_template, input_variables=[ "question"])
-    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
-    return chain
-
-
-
-def user_input(selected_class, selected_subject, selected_chapter, selected_difficulty, selected_question_type, selected_num_questions):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-    docs = new_db.similarity_search(selected_chapter)
-    chain = get_conversation_chain()
-    response = chain({"input_documents": docs, "selected_class": selected_class, "selected_subject": selected_subject,"selected_chapter": selected_chapter, "selected_difficulty": selected_difficulty, "selected_question_type": selected_question_type, "selected_num_questions": selected_num_questions}, return_only_outputs=True)
-    return response["output_text"]
-
-def get_chapters_from_class(selected_class):
-  """
-  This function retrieves chapters for a given class from data.json
-  """
-  try:
-    with open("data.json", "r") as file:
-      data = json.load(file)
-      class_data = data["classes"].get(str(selected_class))
-      if class_data:
-        return list(class_data["subjects"].keys())  # Return subject keys as chapters
-      else:
-        return []
-  except FileNotFoundError:
-    print("Error: data.json not found!")
-    return []
-  except json.JSONDecodeError:
-    print("Error: Invalid JSON format in data.json!")
-    return []
-
-def get_subjects_from_class(selected_class):
-  """
-  This function retrieves subjects for a given class from data.json
-  """
-  try:
-    with open("data.json", "r") as file:
-      data = json.load(file)
-      class_data = data["classes"].get(str(selected_class))
-      if class_data:
-        return list(class_data["subjects"].keys())  # Return subject keys
-      else:
-        return []
-  except FileNotFoundError:
-    print("Error: data.json not found!")
-    return []
-  except json.JSONDecodeError:
-    print("Error: Invalid JSON format in data.json!")
-    return []
 def load_data(filename):
     with open(filename, "r") as file:
         data = json.load(file)
     return data
-def get_chapters_from_subject(selected_class, selected_subject):
-  """
-  This function retrieves chapters for a given subject within a class from data.json
-  """
-  try:
-    with open("data.json", "r") as file:
-      data = json.load(file)
-      class_data = data["classes"].get(str(selected_class))
-      if class_data and selected_subject in class_data["subjects"]:
-        return class_data["subjects"][selected_subject]
-      else:
-        return []
-  except FileNotFoundError:
-    print("Error: data.json not found!")
-    return []
-  except json.JSONDecodeError:
-    print("Error: Invalid JSON format in data.json!")
-    return []
-  
 
 def main():
-    st.set_page_config("TestGenie")
-    st.header("TestGenie")
     data = load_data("data.json")
-    # # Add dropdown for selecting class
+
     selected_class = st.selectbox("Select Class", list(data["classes"].keys()))
 
-    subjects = get_subjects_from_class(selected_class)
-    if not subjects:
-        st.error("No subjects found for selected class!")
-        return
-
-    # Add dropdown for selecting subject
+    subjects = list(data["classes"][selected_class]["subjects"].keys())
     selected_subject = st.selectbox("Select Subject", subjects)
 
-    # Get chapters based on selected class and subject
-    chapters = get_chapters_from_subject(selected_class, selected_subject)
-    if not chapters:
-        st.error("No chapters found for selected class and subject combination!")
-        return
-
-    # Add dropdown for selecting chapter (use chapters list retrieved)
+    chapters = data["classes"][selected_class]["subjects"][selected_subject]
     selected_chapter = st.selectbox("Select Chapter", chapters)
 
-    # Add dropdown for selecting difficulty
     selected_difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"])
 
-    # Add dropdown for selecting question type
     selected_question_type = st.selectbox("Question Type", [
         "Long Answer Type",
         "Short Answer Type",
@@ -268,15 +166,10 @@ def main():
         "Fill in the blanks"
     ])
 
-    # Add dropdown for selecting number of questions
     selected_num_questions = st.selectbox("Number of Questions", ["5", "10", "15", "20"])
 
     if st.button("Submit & Process"):
         with st.spinner("Processing..."):
-            # raw_text = get_pdf_text([])
-            # text_chunks = get_text_chunks(raw_text)
-            # get_vector_store(text_chunks)
-            # st.success("Done")
             result = user_input(selected_class, selected_subject, selected_chapter, selected_difficulty, selected_question_type, selected_num_questions)
             st.write("Reply: ", result)
 
